@@ -1,5 +1,5 @@
 import { Box, Button, useColorMode, useColorModeValue, Flex, HStack } from '@chakra-ui/react'
-import { SunIcon, MoonIcon,DeleteIcon,DownloadIcon } from '@chakra-ui/icons'
+import { SunIcon, MoonIcon } from '@chakra-ui/icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCoins } from '@fortawesome/free-solid-svg-icons';
 function Navbar() {
@@ -11,7 +11,7 @@ function Navbar() {
                 <Flex h={16} alignItems={'center'} justifyContent={'space-between'}>
                 <a style={{fontWeight:'bold'}} href='#Home'>{icon} Position Simulate</a>
                 <HStack >
-                    <Button onClick={toggleColorMode}>
+                    <Button onClick={toggleColorMode} aria-label="Toggle color mode">
                         {colorMode === 'light' ? <MoonIcon /> : <SunIcon />}
                     </Button>
                     </HStack>

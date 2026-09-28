@@ -1,13 +1,14 @@
 import Navbar from "./Components/navbar";
 import { ChakraProvider } from "@chakra-ui/react";
 import Calculator from "./Components/calculator";
-function App({Component,pageProps}) {
+import theme from "./Components/theme";
+
+function App() {
   return (
-    <ChakraProvider>
-        <Navbar {...pageProps}/>
-        <Calculator/>
-      </ChakraProvider>
-   
+    <ChakraProvider theme={theme}>
+      <Navbar />
+      <Calculator />
+    </ChakraProvider>
   );
 }
 
