@@ -13,8 +13,8 @@ import {
   InputLeftAddon,
   InputRightAddon,
   InputRightElement,
-  Switch,
   Stack,
+  Switch,
   useColorModeValue,
 } from "@chakra-ui/react";
 import { ArrowDownIcon, ArrowUpIcon, RepeatClockIcon } from "@chakra-ui/icons";
@@ -23,6 +23,7 @@ import { faCalculator } from "@fortawesome/free-solid-svg-icons";
 import Show from "./tableShow";
 import {
   MODES,
+  RESULTS,
   countLosses,
   countWins,
   currentBalance,
@@ -30,6 +31,7 @@ import {
   expectancy,
   initialState,
   reducer,
+  replay,
   sizingBalance,
   toNumber,
   validateInputs,
@@ -56,14 +58,21 @@ function loadSession() {
   }
 }
 
+// Rebuild a trusted simulation state from whatever is in storage.
 function initSimulation(session) {
   const saved = session && session.simulation;
   if (!saved) return initialState;
+  const history = Array.isArray(saved.history)
+    ? saved.history.filter(
+        (row) =>
+          row &&
+          typeof row.rate === "number" &&
+          (row.result === RESULTS.WIN || row.result === RESULTS.LOSE)
+      )
+    : [];
   return {
     mode: saved.mode === MODES.FIXED ? MODES.FIXED : MODES.COMPOUND,
-    startingBalance:
-      typeof saved.startingBalance === "number" ? saved.startingBalance : 0,
-    history: Array.isArray(saved.history) ? saved.history : [],
+    history,
   };
 }
 
@@ -88,34 +97,32 @@ function Calculator() {
   }, [inputs, state]);
 
   const { valid, values } = validateInputs(inputs);
-  const sizingBase = sizingBalance(state);
-  const trade = values ? deriveTrade(values, sizingBase) : null;
+  const parsedBalance = toNumber(inputs.balance);
+  const startBalance = parsedBalance !== null && parsedBalance > 0 ? parsedBalance : null;
+
+  const trade = values ? deriveTrade(values, sizingBalance(state, values.balance)) : null;
+  const rows =
+    startBalance === null
+      ? state.history.map((row) => ({ ...row, pnl: null, balance: null }))
+      : replay(state.history, startBalance, state.mode);
   const wins = countWins(state.history);
   const losses = countLosses(state.history);
   const rate = winRate(state.history);
-  const expected = expectancy(state, values);
-  const balanceTotal = currentBalance(state);
+  const expected = values ? expectancy(state, values, values.balance) : null;
 
   const fontColor = useColorModeValue("#2c3e50", "white");
   const cardBg = useColorModeValue("white", "#171923");
   const addonBg = useColorModeValue("twitter.500", "twitter.800");
+  const outAddonBg = useColorModeValue("#9F7AEA", "#44337A");
   const winBorder = useColorModeValue("#48BB78", "#276749");
   const loseBorder = useColorModeValue("#F56565", "#9B2C2C");
   const backBorder = useColorModeValue("#ECC94B", "#975A16");
   const icon = <FontAwesomeIcon icon={faCalculator} />;
 
-  const setField = (field) => (event) => {
-    const value = event.target.value;
-    setInputs((prev) => ({ ...prev, [field]: value }));
-    if (field === "balance") {
-      const parsed = toNumber(value);
-      if (parsed !== null) dispatch({ type: "setStartingBalance", value: parsed });
-    }
-  };
+  const setField = (field) => (event) =>
+    setInputs((prev) => ({ ...prev, [field]: event.target.value }));
 
   const resetInputs = () => setInputs(EMPTY_INPUTS);
-
-  const valuesOrDash = (value) => (value === null ? "—" : formatNumber(value));
 
   return (
     <div>
@@ -142,85 +149,46 @@ function Calculator() {
               {icon} Setting Calculator
             </Heading>
 
-            <InputGroup mt={8} size="lg">
-              <InputLeftAddon w="110px" justifyContent="center" bg={addonBg}>
-                MY BALANCE
-              </InputLeftAddon>
-              <Input
-                type="number"
-                textAlign="center"
-                placeholder="Enter your balance"
-                value={inputs.balance}
-                onChange={setField("balance")}
-              />
-              <InputRightAddon w="70px" justifyContent="center" bg={addonBg}>
-                USDT
-              </InputRightAddon>
-            </InputGroup>
-
-            <InputGroup mt={6} size="lg">
-              <InputLeftAddon w="110px" justifyContent="center" bg={addonBg}>
-                RISK PER TRADE
-              </InputLeftAddon>
-              <Input
-                type="number"
-                textAlign="center"
-                placeholder="Enter your risk"
-                value={inputs.risk}
-                onChange={setField("risk")}
-              />
-              <InputRightAddon w="70px" justifyContent="center" bg={addonBg}>
-                %
-              </InputRightAddon>
-            </InputGroup>
-
-            <InputGroup mt={6} size="lg">
-              <InputLeftAddon w="110px" justifyContent="center" bg={addonBg}>
-                TAKE PROFIT
-              </InputLeftAddon>
-              <Input
-                type="number"
-                textAlign="center"
-                placeholder="Enter your take profit"
-                value={inputs.takeProfit}
-                onChange={setField("takeProfit")}
-              />
-              <InputRightAddon w="70px" justifyContent="center" bg={addonBg}>
-                %
-              </InputRightAddon>
-            </InputGroup>
-
-            <InputGroup mt={6} size="lg">
-              <InputLeftAddon w="110px" justifyContent="center" bg={addonBg}>
-                STOP LOSS
-              </InputLeftAddon>
-              <Input
-                type="number"
-                textAlign="center"
-                placeholder="Enter your stop loss"
-                value={inputs.stopLoss}
-                onChange={setField("stopLoss")}
-              />
-              <InputRightAddon w="70px" justifyContent="center" bg={addonBg}>
-                %
-              </InputRightAddon>
-            </InputGroup>
-
-            <InputGroup mt={6} size="lg">
-              <InputLeftAddon w="110px" justifyContent="center" bg={addonBg}>
-                LEVERAGE
-              </InputLeftAddon>
-              <Input
-                type="number"
-                textAlign="center"
-                placeholder="Enter your leverage"
-                value={inputs.leverage}
-                onChange={setField("leverage")}
-              />
-              <InputRightAddon w="70px" justifyContent="center" bg={addonBg}>
-                X
-              </InputRightAddon>
-            </InputGroup>
+            <NumberField
+              label="BALANCE"
+              placeholder="Enter your balance"
+              unit="USDT"
+              value={inputs.balance}
+              onChange={setField("balance")}
+              addonBg={addonBg}
+            />
+            <NumberField
+              label="RISK %"
+              placeholder="Enter your risk"
+              unit="%"
+              value={inputs.risk}
+              onChange={setField("risk")}
+              addonBg={addonBg}
+            />
+            <NumberField
+              label="TAKE PROFIT"
+              placeholder="Enter your take profit"
+              unit="%"
+              value={inputs.takeProfit}
+              onChange={setField("takeProfit")}
+              addonBg={addonBg}
+            />
+            <NumberField
+              label="STOP LOSS"
+              placeholder="Enter your stop loss"
+              unit="%"
+              value={inputs.stopLoss}
+              onChange={setField("stopLoss")}
+              addonBg={addonBg}
+            />
+            <NumberField
+              label="LEVERAGE"
+              placeholder="Enter your leverage"
+              unit="X"
+              value={inputs.leverage}
+              onChange={setField("leverage")}
+              addonBg={addonBg}
+            />
 
             <FormControl display="flex" alignItems="center" mt={6}>
               <FormLabel htmlFor="compound-mode" mb="0">
@@ -254,46 +222,37 @@ function Calculator() {
               {icon} Out Put
             </Heading>
 
-            <OutputRow label="Position Size" value={valuesOrDash(trade && trade.notional)} unit="USDT" />
-            <OutputRow label="Margin" value={valuesOrDash(trade && trade.margin)} unit="USDT" />
-            <OutputRow
-              label="You Risk"
-              value={valuesOrDash(trade && trade.risk)}
-              unit="USDT"
-            />
-            <OutputRow
-              label="You Win"
-              value={valuesOrDash(trade && trade.reward)}
-              unit="USDT"
-            />
+            <OutputRow label="Position Size" value={formatNumber(trade && trade.notional)} unit="USDT" addonBg={outAddonBg} />
+            <OutputRow label="Margin" value={formatNumber(trade && trade.margin)} unit="USDT" addonBg={outAddonBg} />
+            <OutputRow label="You Risk" value={formatNumber(trade && trade.risk)} unit="USDT" addonBg={outAddonBg} />
+            <OutputRow label="You Win" value={formatNumber(trade && trade.reward)} unit="USDT" addonBg={outAddonBg} />
             <OutputRow
               label="RR"
               value={trade ? `1 : ${formatNumber(trade.rewardToRisk)}` : "—"}
+              addonBg={outAddonBg}
             />
             <OutputRow
               label="Break-even WR"
               value={trade ? formatPercent(trade.breakEvenWinRate, 1) : "—"}
+              addonBg={outAddonBg}
             />
 
-            <HStack mt={6} spacing={4}>
-              <OutputRow label="Win" value={wins} flex="1" />
-              <OutputRow label="Lose" value={losses} flex="1" />
+            <Stack direction={{ base: "column", sm: "row" }} spacing={4} mt={6}>
+              <OutputRow label="Win" value={wins} addonBg={outAddonBg} />
+              <OutputRow label="Lose" value={losses} addonBg={outAddonBg} />
               <OutputRow
                 label="Wr"
                 value={rate === null ? "—" : formatPercent(rate, 1)}
-                flex="1"
+                addonBg={outAddonBg}
               />
-            </HStack>
+            </Stack>
 
-            <OutputRow
-              label="Expectancy"
-              value={valuesOrDash(expected)}
-              unit="USDT"
-            />
+            <OutputRow label="Expectancy" value={formatNumber(expected)} unit="USDT" addonBg={outAddonBg} />
             <OutputRow
               label="Balance Total"
-              value={formatNumber(balanceTotal)}
+              value={startBalance === null ? "—" : formatNumber(currentBalance(state, startBalance))}
               unit="USDT"
+              addonBg={outAddonBg}
             />
 
             <Stack
@@ -309,7 +268,7 @@ function Calculator() {
                 leftIcon={<ArrowUpIcon />}
                 isDisabled={!valid}
                 onClick={() =>
-                  dispatch({ type: "record", result: "win", values })
+                  dispatch({ type: "record", result: RESULTS.WIN, values })
                 }
               >
                 Win
@@ -321,7 +280,7 @@ function Calculator() {
                 leftIcon={<ArrowDownIcon />}
                 isDisabled={!valid}
                 onClick={() =>
-                  dispatch({ type: "record", result: "lose", values })
+                  dispatch({ type: "record", result: RESULTS.LOSE, values })
                 }
               >
                 Lose
@@ -354,19 +313,59 @@ function Calculator() {
           </Box>
         </Flex>
 
-        <Show table={state.history} />
+        <Show table={rows} />
       </Container>
     </div>
   );
 }
 
-function OutputRow({ label, value, unit, flex }) {
+const ADDON_LABEL_WIDTH = { base: "92px", sm: "120px" };
+const ADDON_UNIT_WIDTH = { base: "52px", sm: "64px" };
+const ADDON_FONT = { base: "xs", sm: "sm" };
+
+function NumberField({ label, placeholder, unit, value, onChange, addonBg }) {
   return (
-    <InputGroup mt={6} size="lg" flex={flex} minW="0">
-      <InputLeftAddon justifyContent="center" bg={useColorModeValue("#9F7AEA", "#44337A")}>
+    <InputGroup mt={6} size="lg">
+      <InputLeftAddon
+        w={ADDON_LABEL_WIDTH}
+        justifyContent="center"
+        bg={addonBg}
+        fontSize={ADDON_FONT}
+      >
         {label}
       </InputLeftAddon>
-      <Input textAlign="center" value={value} readOnly />
+      <Input
+        type="number"
+        textAlign="center"
+        minW="0"
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+      />
+      <InputRightAddon
+        w={ADDON_UNIT_WIDTH}
+        justifyContent="center"
+        bg={addonBg}
+        fontSize={ADDON_FONT}
+      >
+        {unit}
+      </InputRightAddon>
+    </InputGroup>
+  );
+}
+
+function OutputRow({ label, value, unit, addonBg }) {
+  return (
+    <InputGroup mt={6} size="lg">
+      <InputLeftAddon
+        w={ADDON_LABEL_WIDTH}
+        justifyContent="center"
+        bg={addonBg}
+        fontSize={ADDON_FONT}
+      >
+        {label}
+      </InputLeftAddon>
+      <Input textAlign="center" minW="0" value={value} readOnly />
       {unit ? <InputRightElement mr="8px">{unit}</InputRightElement> : null}
     </InputGroup>
   );

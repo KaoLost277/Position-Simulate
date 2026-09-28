@@ -53,6 +53,16 @@ describe("Calculator", () => {
     expect(screen.getByText("1,080")).toBeInTheDocument();
   });
 
+  it("records a loss and updates the equity curve", async () => {
+    renderCalculator();
+    await fillValidInputs();
+
+    userEvent.click(screen.getByRole("button", { name: /^lose/i }));
+
+    expect(await screen.findByText("-20")).toBeInTheDocument();
+    expect(screen.getByText("980")).toBeInTheDocument();
+  });
+
   it("undraws the last trade", async () => {
     renderCalculator();
     await fillValidInputs();
@@ -70,10 +80,10 @@ describe("Calculator", () => {
     expect(await screen.findByText("+80")).toBeInTheDocument();
 
     userEvent.click(screen.getByRole("button", { name: /^reset/i }));
-    expect(screen.getByText("+80")).toBeInTheDocument();
+    expect(screen.getByText("win")).toBeInTheDocument();
 
     userEvent.click(screen.getByRole("button", { name: /clear history/i }));
-    expect(screen.queryByText("+80")).not.toBeInTheDocument();
+    expect(screen.queryByText("win")).not.toBeInTheDocument();
   });
 
   it("restores a saved session after remount", async () => {

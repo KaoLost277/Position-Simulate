@@ -1,5 +1,6 @@
 import {
   MODES,
+  RESULTS,
   currentBalance,
   countLosses,
   countWins,
@@ -7,8 +8,10 @@ import {
   expectancy,
   initialState,
   reducer,
+  replay,
   sizingBalance,
   toNumber,
+  tradeRate,
   validateInputs,
   winRate,
 } from "./simulation";
@@ -20,6 +23,18 @@ const VALID = {
   stopLoss: "2",
   leverage: "10",
 };
+
+const VALUES = {
+  balance: 1000,
+  risk: 2,
+  takeProfit: 8,
+  stopLoss: 2,
+  leverage: 10,
+};
+
+function record(state, result, values = VALUES) {
+  return reducer(state, { type: "record", result, values });
+}
 
 describe("toNumber", () => {
   it("parses numeric strings", () => {
@@ -39,13 +54,7 @@ describe("validateInputs", () => {
   it("accepts positive fields and leverage >= 1", () => {
     const { valid, values } = validateInputs(VALID);
     expect(valid).toBe(true);
-    expect(values).toEqual({
-      balance: 1000,
-      risk: 2,
-      takeProfit: 8,
-      stopLoss: 2,
-      leverage: 10,
-    });
+    expect(values).toEqual(VALUES);
   });
 
   it("rejects zero, negative and empty fields", () => {
@@ -65,10 +74,8 @@ describe("validateInputs", () => {
 });
 
 describe("deriveTrade", () => {
-  const values = { balance: 1000, risk: 2, takeProfit: 8, stopLoss: 2, leverage: 10 };
-
   it("computes the standard position-sizing model", () => {
-    const t = deriveTrade(values);
+    const t = deriveTrade(VALUES);
     expect(t.riskAmount).toBe(20);
     expect(t.notional).toBe(1000);
     expect(t.margin).toBe(100);
@@ -79,96 +86,96 @@ describe("deriveTrade", () => {
   });
 
   it("changes margin but not dollar risk/reward when leverage changes", () => {
-    const a = deriveTrade({ ...values, leverage: 5 });
-    const b = deriveTrade({ ...values, leverage: 20 });
+    const a = deriveTrade({ ...VALUES, leverage: 5 });
+    const b = deriveTrade({ ...VALUES, leverage: 20 });
     expect(a.margin).not.toBe(b.margin);
     expect(a.reward).toBe(b.reward);
     expect(a.risk).toBe(b.risk);
   });
+});
 
-  it("sizes from an explicit balance", () => {
-    expect(deriveTrade(values, 2000).reward).toBe(160);
+describe("tradeRate", () => {
+  it("is the reward/risk fraction on a win", () => {
+    expect(tradeRate(VALUES, RESULTS.WIN)).toBeCloseTo(0.08, 10);
+  });
+
+  it("is the negative risk fraction on a loss", () => {
+    expect(tradeRate(VALUES, RESULTS.LOSE)).toBeCloseTo(-0.02, 10);
   });
 });
 
-describe("reducer / recording trades", () => {
-  const values = { balance: 1000, risk: 2, takeProfit: 8, stopLoss: 2, leverage: 10 };
-  const start = { ...initialState, startingBalance: 1000 };
-
-  it("records a win against the running balance", () => {
-    const next = reducer(start, { type: "record", result: "win", values });
-    expect(next.history).toHaveLength(1);
-    expect(next.history[0]).toMatchObject({ tradeNumber: 0, result: "win", pnl: 80, balance: 1080 });
-  });
-
-  it("records a loss against the running balance", () => {
-    const next = reducer(start, { type: "record", result: "lose", values });
-    expect(next.history[0]).toMatchObject({ result: "lose", pnl: -20, balance: 980 });
+describe("recording trades", () => {
+  it("stores only the rate, not the balance", () => {
+    const state = record(initialState, RESULTS.WIN);
+    expect(state.history[0]).toEqual({
+      tradeNumber: 0,
+      result: "win",
+      rate: 0.08,
+    });
   });
 
   it("compounds by sizing each new trade from the live balance", () => {
-    let state = reducer(start, { type: "record", result: "win", values });
-    state = reducer(state, { type: "record", result: "win", values });
-    // second win: 2% of 1080 = 21.6 risk, reward 86.4
-    expect(state.history[1].pnl).toBeCloseTo(86.4, 10);
-    expect(currentBalance(state)).toBeCloseTo(1166.4, 10);
+    let state = record(initialState, RESULTS.WIN);
+    state = record(state, RESULTS.WIN);
+    const rows = replay(state.history, 1000, MODES.COMPOUND);
+    expect(rows[0]).toMatchObject({ pnl: 80, balance: 1080 });
+    expect(rows[1].pnl).toBeCloseTo(86.4, 10);
+    expect(rows[1].balance).toBeCloseTo(1166.4, 10);
   });
 
   it("sizes every trade from the starting balance in fixed mode", () => {
-    const fixed = reducer(start, { type: "setMode", mode: MODES.FIXED });
-    let state = reducer(fixed, { type: "record", result: "win", values });
-    state = reducer(state, { type: "record", result: "win", values });
-    expect(state.history[1].pnl).toBe(80);
-    expect(currentBalance(state)).toBe(1160);
+    let state = record(initialState, RESULTS.WIN);
+    state = record(state, RESULTS.WIN);
+    const rows = replay(state.history, 1000, MODES.FIXED);
+    expect(rows[1]).toMatchObject({ pnl: 80, balance: 1160 });
+  });
+
+  it("rescales the whole curve when the starting balance changes", () => {
+    const state = record(initialState, RESULTS.WIN);
+    const rows = replay(state.history, 2000, MODES.COMPOUND);
+    expect(rows[0]).toMatchObject({ pnl: 160, balance: 2160 });
   });
 
   it("ignores a record action without validated values", () => {
-    expect(reducer(start, { type: "record", result: "win", values: null })).toBe(start);
+    expect(reducer(initialState, { type: "record", result: "win", values: null })).toBe(
+      initialState
+    );
   });
 
   it("undo removes the last trade and is a safe no-op when empty", () => {
-    const state = reducer(start, { type: "record", result: "win", values });
+    const state = record(initialState, RESULTS.WIN);
     const undone = reducer(state, { type: "undo" });
     expect(undone.history).toHaveLength(0);
-    expect(currentBalance(undone)).toBe(1000);
-    expect(reducer(start, { type: "undo" })).toBe(start);
+    expect(reducer(initialState, { type: "undo" })).toBe(initialState);
   });
 
   it("clearing history restores the starting balance", () => {
-    const state = reducer(start, { type: "record", result: "lose", values });
-    expect(currentBalance(reducer(state, { type: "clearHistory" }))).toBe(1000);
-  });
-
-  it("changing the starting balance clears the recorded run", () => {
-    const state = reducer(start, { type: "record", result: "win", values });
-    const next = reducer(state, { type: "setStartingBalance", value: 2000 });
-    expect(next.startingBalance).toBe(2000);
-    expect(next.history).toHaveLength(0);
+    const state = record(initialState, RESULTS.LOSE);
+    const cleared = reducer(state, { type: "clearHistory" });
+    expect(cleared.history).toHaveLength(0);
+    expect(currentBalance(cleared, 1000)).toBe(1000);
   });
 });
 
 describe("derived summary", () => {
-  const values = { balance: 1000, risk: 2, takeProfit: 8, stopLoss: 2, leverage: 10 };
-  const start = { ...initialState, startingBalance: 1000 };
-
   it("computes counts, win rate and sizing balance", () => {
-    let state = reducer(start, { type: "record", result: "win", values });
-    state = reducer(state, { type: "record", result: "lose", values });
+    let state = record(initialState, RESULTS.WIN);
+    state = record(state, RESULTS.LOSE);
     expect(countWins(state.history)).toBe(1);
     expect(countLosses(state.history)).toBe(1);
     expect(winRate(state.history)).toBeCloseTo(0.5, 10);
-    expect(sizingBalance(state)).toBe(currentBalance(state));
+    expect(sizingBalance(state, 1000)).toBe(currentBalance(state, 1000));
   });
 
   it("returns null win rate and expectancy before any trade", () => {
-    expect(winRate(start.history)).toBeNull();
-    expect(expectancy(start, values)).toBeNull();
+    expect(winRate(initialState.history)).toBeNull();
+    expect(expectancy(initialState, VALUES, 1000)).toBeNull();
   });
 
   it("computes expectancy from the current win rate and reward/risk", () => {
-    const state = reducer(start, { type: "record", result: "win", values });
+    const state = record(initialState, RESULTS.WIN);
     // 100% win rate, compounding: expectancy == reward of the next trade
     // (2% of 1080 = 21.6 risk, 8% reward = 86.4)
-    expect(expectancy(state, values)).toBeCloseTo(86.4, 10);
+    expect(expectancy(state, VALUES, 1000)).toBeCloseTo(86.4, 10);
   });
 });
