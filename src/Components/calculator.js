@@ -224,12 +224,13 @@ function Calculator() {
             />
 
             <Stack direction={{ base: "column", sm: "row" }} spacing={4} mt={6}>
-              <OutputRow label="Win" value={wins} addonBg={outAddonBg} />
-              <OutputRow label="Lose" value={losses} addonBg={outAddonBg} />
+              <OutputRow label="Win" value={wins} addonBg={outAddonBg} flex={{ base: "none", sm: 1 }} />
+              <OutputRow label="Lose" value={losses} addonBg={outAddonBg} flex={{ base: "none", sm: 1 }} />
               <OutputRow
                 label="Wr"
                 value={rate === null ? "—" : formatPercent(rate, 1)}
                 addonBg={outAddonBg}
+                flex={{ base: "none", sm: 1 }}
               />
             </Stack>
 
@@ -352,9 +353,9 @@ function NumberField({ label, placeholder, unit, value, onChange, addonBg }) {
   );
 }
 
-function OutputRow({ label, value, unit, addonBg }) {
+function OutputRow({ label, value, unit, addonBg, flex }) {
   return (
-    <InputGroup mt={6} size="lg">
+    <InputGroup mt={6} size="lg" flex={flex} minW="0">
       <AddonLabel bg={addonBg}>{label}</AddonLabel>
       <Input textAlign="center" minW="0" value={value} readOnly />
       {unit ? <InputRightElement mr="8px">{unit}</InputRightElement> : null}
