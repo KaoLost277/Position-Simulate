@@ -3,7 +3,7 @@ import { formatNumber } from "../lib/format";
 import { RESULTS } from "../lib/simulation";
 import { WIN_TEXT, LOSE_TEXT } from "../lib/colors";
 
-function Show({ table }) {
+function TradeHistory({ table }) {
   return (
     <Box overflowX="auto">
       <Table mt={10} minW="320px">
@@ -53,4 +53,4 @@ function Show({ table }) {
   );
 }
 
-export default Show;
+export default TradeHistory;

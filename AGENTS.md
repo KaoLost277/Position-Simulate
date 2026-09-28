@@ -23,9 +23,9 @@ Position Simulate: a Create React App (CRA) frontend — a crypto position-size 
 ## Structure
 
 - `src/index.js` → `src/App.js` → `Navbar` + `Calculator`
-- `src/lib/simulation.js` — **all** calculation and state logic (pure, framework-free): validation, single-trade model, `tradeRate`, `replay`, reducer. State stores a per-trade `rate`, not balances; balances are re-derived with `replay` so editing the balance rescales the curve without losing history. Tested in `src/lib/simulation.test.js`.
+- `src/lib/simulation.js` — **all** calculation, validation and state logic (pure, framework-free): input validation, `parseStartingBalance`, `sanitizeHistory`/`hydrateSimulation`, single-trade model, `tradeRate`, `replay`, reducer. State stores a per-trade `rate`, not balances; balances are re-derived with `replay` so editing the balance rescales the curve without losing history. Tested in `src/lib/simulation.test.js`.
 - `src/lib/format.js` — number/percent display helpers (returns `—` for non-finite values). `src/lib/colors.js` — shared win/loss colors.
 - `src/Components/calculator.js` — the view; reads from `simulation.js`, persists to `localStorage` (`position-simulate:v1`). Tested in `src/Components/calculator.test.js`.
-- `src/Components/tableShow.js` — trade history table; `navbar.js`, `theme.js` — chrome.
+- `src/Components/TradeHistory.js` — trade history table; `navbar.js`, `theme.js` — chrome.
 - Deployed on Netlify (https://positionsimulate.netlify.app); no CI workflow or deploy config committed — Netlify builds `npm run build` and serves `build/`.
 - Planning docs live in `.scratch/position-simulate-improvements/` (local-markdown issue tracker).

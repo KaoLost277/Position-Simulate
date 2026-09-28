@@ -20,7 +20,7 @@ import {
 import { ArrowDownIcon, ArrowUpIcon, RepeatClockIcon } from "@chakra-ui/icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCalculator } from "@fortawesome/free-solid-svg-icons";
-import Show from "./tableShow";
+import TradeHistory from "./TradeHistory";
 import {
   MODES,
   RESULTS,
@@ -29,11 +29,11 @@ import {
   currentBalance,
   deriveTrade,
   expectancy,
-  initialState,
+  hydrateSimulation,
+  parseStartingBalance,
   reducer,
   replay,
   sizingBalance,
-  toNumber,
   validateInputs,
   winRate,
 } from "../lib/simulation";
@@ -60,20 +60,7 @@ function loadSession() {
 
 // Rebuild a trusted simulation state from whatever is in storage.
 function initSimulation(session) {
-  const saved = session && session.simulation;
-  if (!saved) return initialState;
-  const history = Array.isArray(saved.history)
-    ? saved.history.filter(
-        (row) =>
-          row &&
-          typeof row.rate === "number" &&
-          (row.result === RESULTS.WIN || row.result === RESULTS.LOSE)
-      )
-    : [];
-  return {
-    mode: saved.mode === MODES.FIXED ? MODES.FIXED : MODES.COMPOUND,
-    history,
-  };
+  return hydrateSimulation(session && session.simulation);
 }
 
 function initInputs(session) {
@@ -97,8 +84,7 @@ function Calculator() {
   }, [inputs, state]);
 
   const { valid, values } = validateInputs(inputs);
-  const parsedBalance = toNumber(inputs.balance);
-  const startBalance = parsedBalance !== null && parsedBalance > 0 ? parsedBalance : null;
+  const startBalance = parseStartingBalance(inputs.balance);
 
   const trade = values ? deriveTrade(values, sizingBalance(state, values.balance)) : null;
   const rows =
@@ -293,7 +279,7 @@ function Calculator() {
                 isDisabled={!state.history.length}
                 onClick={() => dispatch({ type: "undo" })}
               >
-                Back
+                Undo
               </Button>
             </Stack>
 
@@ -313,7 +299,7 @@ function Calculator() {
           </Box>
         </Flex>
 
-        <Show table={rows} />
+        <TradeHistory table={rows} />
       </Container>
     </div>
   );
@@ -323,17 +309,36 @@ const ADDON_LABEL_WIDTH = { base: "92px", sm: "120px" };
 const ADDON_UNIT_WIDTH = { base: "52px", sm: "64px" };
 const ADDON_FONT = { base: "xs", sm: "sm" };
 
+function AddonLabel({ children, bg }) {
+  return (
+    <InputLeftAddon
+      w={ADDON_LABEL_WIDTH}
+      justifyContent="center"
+      bg={bg}
+      fontSize={ADDON_FONT}
+    >
+      {children}
+    </InputLeftAddon>
+  );
+}
+
+function AddonUnit({ children, bg }) {
+  return (
+    <InputRightAddon
+      w={ADDON_UNIT_WIDTH}
+      justifyContent="center"
+      bg={bg}
+      fontSize={ADDON_FONT}
+    >
+      {children}
+    </InputRightAddon>
+  );
+}
+
 function NumberField({ label, placeholder, unit, value, onChange, addonBg }) {
   return (
     <InputGroup mt={6} size="lg">
-      <InputLeftAddon
-        w={ADDON_LABEL_WIDTH}
-        justifyContent="center"
-        bg={addonBg}
-        fontSize={ADDON_FONT}
-      >
-        {label}
-      </InputLeftAddon>
+      <AddonLabel bg={addonBg}>{label}</AddonLabel>
       <Input
         type="number"
         textAlign="center"
@@ -342,14 +347,7 @@ function NumberField({ label, placeholder, unit, value, onChange, addonBg }) {
         value={value}
         onChange={onChange}
       />
-      <InputRightAddon
-        w={ADDON_UNIT_WIDTH}
-        justifyContent="center"
-        bg={addonBg}
-        fontSize={ADDON_FONT}
-      >
-        {unit}
-      </InputRightAddon>
+      <AddonUnit bg={addonBg}>{unit}</AddonUnit>
     </InputGroup>
   );
 }
@@ -357,14 +355,7 @@ function NumberField({ label, placeholder, unit, value, onChange, addonBg }) {
 function OutputRow({ label, value, unit, addonBg }) {
   return (
     <InputGroup mt={6} size="lg">
-      <InputLeftAddon
-        w={ADDON_LABEL_WIDTH}
-        justifyContent="center"
-        bg={addonBg}
-        fontSize={ADDON_FONT}
-      >
-        {label}
-      </InputLeftAddon>
+      <AddonLabel bg={addonBg}>{label}</AddonLabel>
       <Input textAlign="center" minW="0" value={value} readOnly />
       {unit ? <InputRightElement mr="8px">{unit}</InputRightElement> : null}
     </InputGroup>

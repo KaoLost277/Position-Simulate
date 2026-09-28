@@ -91,6 +91,32 @@ export const initialState = Object.freeze({
   history: [],
 });
 
+// Positive starting balance parsed from the raw input, or null when unusable.
+export function parseStartingBalance(raw) {
+  const n = toNumber(raw);
+  return n !== null && n > 0 ? n : null;
+}
+
+// Keep only rows that are safe to replay (numeric rate, known result).
+export function sanitizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history.filter(
+    (row) =>
+      row &&
+      Number.isFinite(row.rate) &&
+      (row.result === RESULTS.WIN || row.result === RESULTS.LOSE)
+  );
+}
+
+// Rebuild a trusted simulation state from whatever was persisted.
+export function hydrateSimulation(saved) {
+  if (!saved) return initialState;
+  return {
+    mode: saved.mode === MODES.FIXED ? MODES.FIXED : MODES.COMPOUND,
+    history: sanitizeHistory(saved.history),
+  };
+}
+
 // Balance after all recorded trades, or the starting balance when none exist.
 export function currentBalance(state, startingBalance) {
   const rows = replay(state.history, startingBalance, state.mode);

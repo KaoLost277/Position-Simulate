@@ -6,9 +6,12 @@ import {
   countWins,
   deriveTrade,
   expectancy,
+  hydrateSimulation,
   initialState,
+  parseStartingBalance,
   reducer,
   replay,
+  sanitizeHistory,
   sizingBalance,
   toNumber,
   tradeRate,
@@ -154,6 +157,44 @@ describe("recording trades", () => {
     const cleared = reducer(state, { type: "clearHistory" });
     expect(cleared.history).toHaveLength(0);
     expect(currentBalance(cleared, 1000)).toBe(1000);
+  });
+});
+
+describe("session rehydration helpers", () => {
+  it("parses a positive starting balance or null", () => {
+    expect(parseStartingBalance("1000")).toBe(1000);
+    expect(parseStartingBalance("0")).toBeNull();
+    expect(parseStartingBalance("-5")).toBeNull();
+    expect(parseStartingBalance("")).toBeNull();
+    expect(parseStartingBalance("abc")).toBeNull();
+  });
+
+  it("drops rows that cannot be replayed", () => {
+    const good = { tradeNumber: 0, result: "win", rate: 0.08 };
+    const kept = sanitizeHistory([
+      good,
+      null,
+      { tradeNumber: 1, result: "win", rate: "0.08" },
+      { tradeNumber: 2, result: "sideways", rate: 0.1 },
+      { tradeNumber: 3, result: "lose", rate: -0.02 },
+    ]);
+    expect(kept).toEqual([
+      good,
+      { tradeNumber: 3, result: "lose", rate: -0.02 },
+    ]);
+  });
+
+  it("hydrates mode and history, defaulting safely", () => {
+    expect(hydrateSimulation(null)).toEqual(initialState);
+    expect(hydrateSimulation({ mode: "nonsense", history: "no" })).toEqual(
+      initialState
+    );
+    const hydrated = hydrateSimulation({
+      mode: MODES.FIXED,
+      history: [{ tradeNumber: 0, result: "win", rate: 0.08 }],
+    });
+    expect(hydrated.mode).toBe(MODES.FIXED);
+    expect(hydrated.history).toHaveLength(1);
   });
 });
 

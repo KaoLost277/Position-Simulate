@@ -69,7 +69,7 @@ describe("Calculator", () => {
     userEvent.click(screen.getByRole("button", { name: /^win/i }));
     expect(await screen.findByText("+80")).toBeInTheDocument();
 
-    userEvent.click(screen.getByRole("button", { name: /^back/i }));
+    userEvent.click(screen.getByRole("button", { name: /^undo/i }));
     expect(screen.queryByText("+80")).not.toBeInTheDocument();
   });
 
